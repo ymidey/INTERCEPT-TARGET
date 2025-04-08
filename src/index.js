@@ -12,11 +12,28 @@ const initialConfig = {
     freezeStartTime: 0,
     originalBackgroundColor: new THREE.Color(0x000000),
     freezeBackgroundColor: new THREE.Color(0x00008B),
+    transitionBackgroundColor: new THREE.Color(0xffffff),
+    transitionDuration: 4,
     speedIncreaseFactor: 1,
     respawnDelay: 2,
     bestScore: localStorage.getItem('bestScore') || 0
-
 };
+
+const gameMusic = document.getElementById('gameMusic');
+const laserSound = document.createElement('audio');
+laserSound.src = './music/laser.mp3';
+
+const explosionSounds = [
+    document.createElement('audio'),
+    document.createElement('audio'),
+    document.createElement('audio')
+];
+explosionSounds[0].src = './music/explosion1.mp3';
+explosionSounds[1].src = './music/explosion2.mp3';
+explosionSounds[2].src = './music/explosion3.mp3';
+
+const snowballSound = document.createElement('audio');
+snowballSound.src = './music/freeze.mp3';
 
 document.body.style.cursor = 'url("./img/cible_.png"), auto';
 
@@ -60,8 +77,18 @@ function initializeTargets() {
 }
 
 const scoreDiv = createUIElement('right', '10px', `Score: ${initialConfig.playerScore}`);
-const livesDiv = createUIElement('left', '10px', `Vies: ${initialConfig.playerLives}`);
+const livesDiv = createUIElement('left', '10px', ``);
 const gameOverDiv = createGameOverElement();
+
+// Create heart images for lives
+for (let i = 0; i < initialConfig.playerLives; i++) {
+    const heartImg = document.createElement('img');
+    heartImg.src = './img/heart.png';
+    heartImg.style.width = '100px';
+    heartImg.style.height = '100px';
+    heartImg.style.marginRight = '5px';
+    livesDiv.appendChild(heartImg);
+}
 
 const sizes = {
     width: window.innerWidth,
@@ -87,6 +114,10 @@ document.addEventListener('click', handleClick);
 function handleClick(event) {
     if (!initialConfig.gameActive || !initialConfig.gameInitialized) return;
 
+    // Play the laser sound
+    laserSound.currentTime = 0;
+    laserSound.play();
+
     pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
     pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -106,6 +137,18 @@ function tick() {
     const elapsedTime = clock.getElapsedTime();
     let livesLost = 0;
 
+    // Start the color transition after 18 seconds
+    if (elapsedTime >= 15 && initialConfig.transitionStartTime === 0) {
+        initialConfig.transitionStartTime = elapsedTime;
+    }
+
+    // Perform the color transition
+    if (initialConfig.transitionStartTime > 0) {
+        const transitionElapsedTime = elapsedTime - initialConfig.transitionStartTime;
+        const t = Math.min(transitionElapsedTime / initialConfig.transitionDuration, 1);
+        scene.background.lerpColors(initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, t);
+    }
+
     if (initialConfig.freezeTime > 0 && elapsedTime - initialConfig.freezeStartTime < initialConfig.freezeTime) {
         requestAnimationFrame(tick);
         renderer.render(scene, camera);
@@ -116,11 +159,6 @@ function tick() {
     }
 
     targets.forEach((target, index) => {
-        if (respawnTimes[index] && elapsedTime >= respawnTimes[index]) {
-            respawn(target);
-            respawnTimes[index] = 0;
-        }
-
         if (initialConfig.freezeTime === 0 && target.userData) {
             target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.004, target.userData.maxSpeed);
             target.position.x += target.userData.speed * 0.01;
@@ -137,7 +175,7 @@ function tick() {
 
     if (livesLost > 0) {
         initialConfig.playerLives -= livesLost;
-        livesDiv.textContent = `Vies: ${initialConfig.playerLives}`;
+        updateLivesDisplay();
 
         if (initialConfig.playerLives <= 0) {
             initialConfig.gameActive = false;
@@ -146,7 +184,18 @@ function tick() {
             scoreDiv.style.display = 'none';
             livesDiv.style.display = 'none';
 
-            // Vérifiez si le score actuel dépasse le meilleur score
+            // Stop the music when the game is over
+            gameMusic.pause();
+            gameMusic.currentTime = 0;
+
+            // Perform the color transition
+            if (initialConfig.transitionStartTime > 0) {
+                const transitionElapsedTime = elapsedTime - initialConfig.transitionStartTime;
+                const t = Math.min(transitionElapsedTime / initialConfig.transitionDuration, 1);
+                scene.background.lerpColors(initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, t);
+            }
+
+            // Check if the current score exceeds the best score
             if (initialConfig.playerScore > initialConfig.bestScore) {
                 initialConfig.bestScore = initialConfig.playerScore;
                 localStorage.setItem('bestScore', initialConfig.bestScore);
@@ -169,11 +218,16 @@ function tick() {
 function startGame() {
     initialConfig.gameInitialized = true;
     initialConfig.gameActive = true;
+    initialConfig.backgroundColor = initialConfig.originalBackgroundColor;
     canvas.style.display = 'block';
     scoreDiv.style.display = 'block';
     livesDiv.style.display = 'block';
+    initialConfig.transitionStartTime = 0; // Reset transition start time
 
     resetGameState();
+    gameMusic.currentTime = 0;
+    gameMusic.volume = 0.4;
+    gameMusic.play();
     tick();
 }
 
@@ -182,7 +236,7 @@ function resetGameState() {
     initialConfig.playerLives = 3;
     initialConfig.freezeTime = 0;
     scoreDiv.textContent = `Score: ${initialConfig.playerScore}`;
-    livesDiv.textContent = `Vies: ${initialConfig.playerLives}`;
+    updateLivesDisplay();
     gameOverDiv.style.display = 'none';
 
     targets.forEach((target, index) => {
@@ -204,6 +258,17 @@ function handleTargetHit(intersect) {
     if (target.userData) {
         initialConfig.playerScore += target.userData.gain;
         scoreDiv.textContent = `Score: ${initialConfig.playerScore}`;
+
+        if (target.userData.type === TYPE.FREEZE) {
+            // Play the snowball sound
+            snowballSound.currentTime = 0;
+            snowballSound.play();
+        } else {
+            // Play a random explosion sound
+            const randomIndex = Math.floor(Math.random() * explosionSounds.length);
+            explosionSounds[randomIndex].currentTime = 0;
+            explosionSounds[randomIndex].play();
+        }
 
         if (target.userData.freezeDuration) {
             initialConfig.freezeTime = target.userData.freezeDuration;
@@ -242,6 +307,18 @@ function createGameOverElement() {
     element.style.display = 'none';
     document.body.appendChild(element);
     return element;
+}
+
+function updateLivesDisplay() {
+    // Update the display of lives by hiding heart images
+    const hearts = livesDiv.getElementsByTagName('img');
+    for (let i = 0; i < hearts.length; i++) {
+        if (i < initialConfig.playerLives) {
+            hearts[i].style.display = 'inline';
+        } else {
+            hearts[i].style.display = 'none';
+        }
+    }
 }
 
 function getRandomInt(max) {

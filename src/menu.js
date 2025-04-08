@@ -2,7 +2,7 @@ export class GameMenu {
     constructor(startCallback) {
         this.menuContainer = document.createElement('div');
         this.startButton = document.createElement('button');
-        this.scoreDisplay = document.createElement('div'); // Nouvel élément pour le score
+        this.scoreDisplay = document.createElement('div');
         this.isVisible = true;
 
         this.createStyles();
@@ -30,7 +30,6 @@ export class GameMenu {
 
             .game-menu {
                 text-align: center;
-                background: rgba(0, 0, 0, 0.8);
                 padding: 2rem;
                 border: 2px solid #00ff00;
                 border-radius: 10px;
@@ -173,6 +172,6 @@ export class GameMenu {
     }
 
     updateScore(score) {
-        this.scoreDisplay.textContent = score ? `Nouveau meilleur score : ${score}` : 'Meilleur score : 0';
+        this.scoreDisplay.textContent = score ? `${score}` : 'Meilleur score : 0';
     }
 }
