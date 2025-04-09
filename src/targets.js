@@ -16,11 +16,6 @@ export const TYPE = {
   FREEZE: 4
 };
 
-export const SCREEN_LIMIT = {
-  LEFT: -15,
-  RIGHT: 15
-};
-
 export const getTarget = (type) => {
   let mesh;
 

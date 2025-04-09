@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TYPE, getTarget, SCREEN_LIMIT } from './targets';
+import { TYPE, getTarget } from './targets';
 import { GameMenu } from './menu';
 
 const initialConfig = {
@@ -10,13 +10,20 @@ const initialConfig = {
     gameInitialized: false,
     freezeTime: 0,
     freezeStartTime: 0,
-    originalBackgroundColor: new THREE.Color(0x000000),
-    freezeBackgroundColor: new THREE.Color(0x00008B),
-    transitionBackgroundColor: new THREE.Color(0xffffff),
-    transitionDuration: 4,
+    originalBackgroundColor: 0x000000, // Stored as hexadecimal number
+    freezeBackgroundColor: 0x00008B,
+    transitionBackgroundColor: 0xffffff,
+    greenBackgroundColor: 0x00ff00, // Green color
+    purpleBackgroundColor: 0x800080, // Purple color
+    preFreezeColor: null,
+    transitionDuration: 3, // Longer transition for epic effect
     speedIncreaseFactor: 1,
     respawnDelay: 2,
-    bestScore: localStorage.getItem('bestScore') || 0
+    bestScore: localStorage.getItem('bestScore') || 0,
+    transitionStartTime: 0,
+    secondTransitionStartTime: 0,
+    thirdTransitionStartTime: 0,
+    lastTickTime: 0 // Ajout pour suivre le temps écoulé
 };
 
 const gameMusic = document.getElementById('gameMusic');
@@ -41,7 +48,7 @@ const canvas = document.querySelector('canvas.webgl');
 canvas.style.display = 'none';
 
 const scene = new THREE.Scene();
-scene.background = initialConfig.originalBackgroundColor;
+scene.background = new THREE.Color(initialConfig.originalBackgroundColor);
 
 const startMenu = new GameMenu(startGame);
 const mapLevel1 = [
@@ -51,15 +58,10 @@ const mapLevel1 = [
 
 const targets = [];
 const respawnTimes = [];
+let trailParticles = [];
+let explosionParticles = [];
 
-function createHitbox(target) {
-    const hitbox = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, 1.5, 1.5),
-        new THREE.MeshBasicMaterial({ visible: false })
-    );
-    target.add(hitbox);
-    return hitbox;
-}
+let SCREEN_LIMIT = { LEFT: -15, RIGHT: 15 }; // Initial screen limits
 
 function initializeTargets() {
     mapLevel1.forEach(type => {
@@ -70,6 +72,11 @@ function initializeTargets() {
             scene.add(target);
             targets.push(target);
             respawnTimes.push(0);
+
+            // Ajouter des traînées pour chaque cible
+            const trail = createTrail(target);
+            trailParticles.push(trail);
+            scene.add(trail);
         } else {
             console.error(`Target of type ${type} is not correctly initialized.`);
         }
@@ -131,36 +138,148 @@ function handleClick(event) {
 
 const clock = new THREE.Clock();
 
+function handleColorTransition(startTime, duration, colorStart, colorEnd, elapsedTime) {
+    if (startTime > 0 && elapsedTime < startTime + duration) {
+        const transitionElapsedTime = elapsedTime - startTime;
+        const t = Math.min(transitionElapsedTime / duration, 1);
+        scene.background.lerpColors(new THREE.Color(colorStart), new THREE.Color(colorEnd), t);
+    }
+}
+
+function updateScreenLimits() {
+    const aspectRatio = sizes.width / sizes.height;
+    const limit = 15 * aspectRatio; // Adjust the multiplier as needed
+    SCREEN_LIMIT.LEFT = -limit;
+    SCREEN_LIMIT.RIGHT = limit;
+}
+
+function createTrail(target) {
+    const trailGeometry = new THREE.BufferGeometry();
+    const trailMaterial = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.1,
+        transparent: true,
+        opacity: 0.5
+    });
+
+    const positions = new Float32Array(100 * 3); // 100 particules
+    trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const trail = new THREE.Points(trailGeometry, trailMaterial);
+    trail.userData.target = target;
+
+    return trail;
+}
+
+function updateTrails() {
+    trailParticles.forEach(trail => {
+        const target = trail.userData.target;
+        const positions = trail.geometry.attributes.position.array;
+
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i] = target.position.x;
+            positions[i + 1] = target.position.y;
+            positions[i + 2] = target.position.z;
+        }
+
+        trail.geometry.attributes.position.needsUpdate = true;
+    });
+}
+
+function createExplosion(position) {
+    const explosionGeometry = new THREE.BufferGeometry();
+    const explosionMaterial = new THREE.PointsMaterial({
+        color: 0xff0000,
+        size: 0.2,
+        transparent: true,
+        opacity: 1.0
+    });
+
+    const positions = new Float32Array(200 * 3); // 200 particules
+    explosionGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const explosion = new THREE.Points(explosionGeometry, explosionMaterial);
+    explosion.position.copy(position);
+
+    // Animer l'explosion
+    const velocities = new Float32Array(200 * 3);
+    for (let i = 0; i < velocities.length; i += 3) {
+        velocities[i] = (Math.random() - 0.5) * 2;
+        velocities[i + 1] = (Math.random() - 0.5) * 2;
+        velocities[i + 2] = (Math.random() - 0.5) * 2;
+    }
+    explosion.userData.velocities = velocities;
+    explosion.userData.time = 0;
+
+    explosionParticles.push(explosion);
+    scene.add(explosion);
+}
+
+function updateExplosions(deltaTime) {
+    explosionParticles = explosionParticles.filter(explosion => {
+        explosion.userData.time += deltaTime;
+        const positions = explosion.geometry.attributes.position.array;
+        const velocities = explosion.userData.velocities;
+
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i] += velocities[i] * deltaTime * 2;
+            positions[i + 1] += velocities[i + 1] * deltaTime * 2;
+            positions[i + 2] += velocities[i + 2] * deltaTime * 2;
+        }
+
+        explosion.geometry.attributes.position.needsUpdate = true;
+        explosion.material.opacity = 1.0 - explosion.userData.time * 0.5;
+
+        return explosion.userData.time < 2; // Supprimer après 2 secondes
+    });
+}
+
 function tick() {
     if (!initialConfig.gameActive || !initialConfig.gameInitialized) return;
 
     const elapsedTime = clock.getElapsedTime();
+    const deltaTime = elapsedTime - initialConfig.lastTickTime;
+    initialConfig.lastTickTime = elapsedTime;
+
     let livesLost = 0;
 
-    // Start the color transition after 18 seconds
     if (elapsedTime >= 15 && initialConfig.transitionStartTime === 0) {
         initialConfig.transitionStartTime = elapsedTime;
     }
 
-    // Perform the color transition
-    if (initialConfig.transitionStartTime > 0) {
-        const transitionElapsedTime = elapsedTime - initialConfig.transitionStartTime;
-        const t = Math.min(transitionElapsedTime / initialConfig.transitionDuration, 1);
-        scene.background.lerpColors(initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, t);
+    if (elapsedTime >= 24 && initialConfig.secondTransitionStartTime === 0) {
+        initialConfig.secondTransitionStartTime = elapsedTime;
     }
 
-    if (initialConfig.freezeTime > 0 && elapsedTime - initialConfig.freezeStartTime < initialConfig.freezeTime) {
-        requestAnimationFrame(tick);
-        renderer.render(scene, camera);
-        return;
-    } else if (initialConfig.freezeTime > 0) {
-        initialConfig.freezeTime = 0;
-        scene.background = initialConfig.originalBackgroundColor;
+    if (elapsedTime >= 33 && initialConfig.thirdTransitionStartTime === 0) {
+        initialConfig.thirdTransitionStartTime = elapsedTime;
+    }
+
+    handleColorTransition(initialConfig.transitionStartTime, initialConfig.transitionDuration, initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, elapsedTime);
+    handleColorTransition(initialConfig.secondTransitionStartTime, initialConfig.transitionDuration, initialConfig.transitionBackgroundColor, initialConfig.greenBackgroundColor, elapsedTime);
+    handleColorTransition(initialConfig.thirdTransitionStartTime, initialConfig.transitionDuration, initialConfig.greenBackgroundColor, initialConfig.purpleBackgroundColor, elapsedTime);
+
+    if (initialConfig.freezeTime > 0) {
+        if (elapsedTime - initialConfig.freezeStartTime < initialConfig.freezeTime) {
+            if (!initialConfig.preFreezeColor) {
+                initialConfig.preFreezeColor = scene.background.getHex();
+            }
+            scene.background = new THREE.Color(initialConfig.freezeBackgroundColor);
+            requestAnimationFrame(tick);
+            renderer.render(scene, camera);
+            return;
+        } else {
+            initialConfig.freezeTime = 0;
+            if (initialConfig.preFreezeColor) {
+                scene.background = new THREE.Color(initialConfig.preFreezeColor);
+                initialConfig.preFreezeColor = null;
+            }
+        }
     }
 
     targets.forEach((target, index) => {
         if (initialConfig.freezeTime === 0 && target.userData) {
-            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.004, target.userData.maxSpeed);
+            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.009, target.userData.maxSpeed);
             target.position.x += target.userData.speed * 0.01;
         }
 
@@ -179,23 +298,20 @@ function tick() {
 
         if (initialConfig.playerLives <= 0) {
             initialConfig.gameActive = false;
+            scene.background = new THREE.Color(initialConfig.originalBackgroundColor);
+            initialConfig.transitionStartTime = 0;
+            initialConfig.secondTransitionStartTime = 0;
+            initialConfig.thirdTransitionStartTime = 0;
             gameOverDiv.style.display = 'block';
             canvas.style.display = 'none';
             scoreDiv.style.display = 'none';
             livesDiv.style.display = 'none';
 
-            // Stop the music when the game is over
             gameMusic.pause();
             gameMusic.currentTime = 0;
 
-            // Perform the color transition
-            if (initialConfig.transitionStartTime > 0) {
-                const transitionElapsedTime = elapsedTime - initialConfig.transitionStartTime;
-                const t = Math.min(transitionElapsedTime / initialConfig.transitionDuration, 1);
-                scene.background.lerpColors(initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, t);
-            }
+            scene.background = new THREE.Color(initialConfig.originalBackgroundColor);
 
-            // Check if the current score exceeds the best score
             if (initialConfig.playerScore > initialConfig.bestScore) {
                 initialConfig.bestScore = initialConfig.playerScore;
                 localStorage.setItem('bestScore', initialConfig.bestScore);
@@ -211,6 +327,9 @@ function tick() {
         }
     }
 
+    updateTrails();
+    updateExplosions(deltaTime);
+
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
 }
@@ -223,6 +342,8 @@ function startGame() {
     scoreDiv.style.display = 'block';
     livesDiv.style.display = 'block';
     initialConfig.transitionStartTime = 0; // Reset transition start time
+    initialConfig.secondTransitionStartTime = 0; // Reset second transition start time
+    initialConfig.thirdTransitionStartTime = 0; // Reset third transition start time
 
     resetGameState();
     gameMusic.currentTime = 0;
@@ -238,6 +359,10 @@ function resetGameState() {
     scoreDiv.textContent = `Score: ${initialConfig.playerScore}`;
     updateLivesDisplay();
     gameOverDiv.style.display = 'none';
+    scene.background.copy(new THREE.Color(initialConfig.originalBackgroundColor));
+    initialConfig.transitionStartTime = 0;
+    initialConfig.secondTransitionStartTime = 0;
+    initialConfig.thirdTransitionStartTime = 0;
 
     targets.forEach((target, index) => {
         respawn(target);
@@ -260,20 +385,21 @@ function handleTargetHit(intersect) {
         scoreDiv.textContent = `Score: ${initialConfig.playerScore}`;
 
         if (target.userData.type === TYPE.FREEZE) {
-            // Play the snowball sound
             snowballSound.currentTime = 0;
             snowballSound.play();
         } else {
-            // Play a random explosion sound
             const randomIndex = Math.floor(Math.random() * explosionSounds.length);
             explosionSounds[randomIndex].currentTime = 0;
             explosionSounds[randomIndex].play();
+
+            // Créer une explosion à la position de la cible
+            createExplosion(target.position);
         }
 
         if (target.userData.freezeDuration) {
             initialConfig.freezeTime = target.userData.freezeDuration;
             initialConfig.freezeStartTime = clock.getElapsedTime();
-            scene.background = initialConfig.freezeBackgroundColor;
+            scene.background = new THREE.Color(initialConfig.freezeBackgroundColor);
         }
 
         const index = targets.indexOf(target);
@@ -310,11 +436,11 @@ function createGameOverElement() {
 }
 
 function updateLivesDisplay() {
-    // Update the display of lives by hiding heart images
     const hearts = livesDiv.getElementsByTagName('img');
     for (let i = 0; i < hearts.length; i++) {
         if (i < initialConfig.playerLives) {
             hearts[i].style.display = 'inline';
+            hearts[i].style.pointerEvents = 'none'; // Disable clicks on heart images
         } else {
             hearts[i].style.display = 'none';
         }
@@ -340,6 +466,8 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(sizes.width, sizes.height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    updateScreenLimits(); // Update screen limits on resize
 });
 
 initializeTargets();
+updateScreenLimits(); // Initial call to set screen limits

@@ -16,7 +16,7 @@ export class GameMenu {
             @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
             body {
-                background-image: url('https://www.transparenttextures.com/patterns/black-felt.png'), url('./img/background.png');
+                background-image: url('./img/background.png');
                 background-blend-mode: overlay;
                 background-size: cover;
                 margin: 0;
@@ -74,46 +74,6 @@ export class GameMenu {
             h1 {
                 color: #00ff00;
                 animation: neon-glow 1.5s ease-in-out infinite;
-            }
-
-            .noise {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: url('https://www.transparenttextures.com/patterns/black-felt.png');
-                opacity: 0.05;
-                pointer-events: none;
-                z-index: 10;
-            }
-
-            .scanlines {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: repeating-linear-gradient(
-                    to bottom,
-                    rgba(0, 0, 0, 0) 0%,
-                    rgba(0, 0, 0, 0.1) 50%,
-                    rgba(0, 0, 0, 0) 100%
-                );
-                background-size: 100% 4px;
-                opacity: 0.2;
-                pointer-events: none;
-                z-index: 10;
-                animation: scanlines 0.1s linear infinite;
-            }
-
-            @keyframes scanlines {
-                0% {
-                    transform: translateY(0);
-                }
-                100% {
-                    transform: translateY(100%);
-                }
             }
 
             .score-display {
