@@ -10,23 +10,30 @@ const initialConfig = {
     gameInitialized: false,
     freezeTime: 0,
     freezeStartTime: 0,
-    originalBackgroundColor: 0x000000, // Stored as hexadecimal number
+    originalBackgroundColor: 0x000000,
     freezeBackgroundColor: 0x00008B,
     transitionBackgroundColor: 0xffffff,
-    greenBackgroundColor: 0x00ff00, // Green color
-    purpleBackgroundColor: 0x800080, // Purple color
+    greenBackgroundColor: 0x006400,
+    purpleBackgroundColor: 0x800080,
+    darkBrownBackgroundColor: 0x8B4513,
+    darkYellowBackgroundColor: 0xFFD700,
+    darkRedBackgroundColor: 0x8B0000,
     preFreezeColor: null,
-    transitionDuration: 3, // Longer transition for epic effect
+    transitionDuration: 3,
     speedIncreaseFactor: 1,
     respawnDelay: 2,
     bestScore: localStorage.getItem('bestScore') || 0,
     transitionStartTime: 0,
     secondTransitionStartTime: 0,
     thirdTransitionStartTime: 0,
-    lastTickTime: 0 // Ajout pour suivre le temps écoulé
+    fourTransitionStartTime: 0,
+    fiveTransitionStartTime: 0,
+    sixTransitionStartTime: 0,
+    lastTickTime: 0
 };
 
 const gameMusic = document.getElementById('gameMusic');
+gameMusic.loop = true;
 const laserSound = document.createElement('audio');
 laserSound.src = './music/laser.mp3';
 
@@ -58,10 +65,9 @@ const mapLevel1 = [
 
 const targets = [];
 const respawnTimes = [];
-let trailParticles = [];
 let explosionParticles = [];
 
-let SCREEN_LIMIT = { LEFT: -15, RIGHT: 15 }; // Initial screen limits
+let SCREEN_LIMIT = { LEFT: -15, RIGHT: 10 };
 
 function initializeTargets() {
     mapLevel1.forEach(type => {
@@ -73,10 +79,6 @@ function initializeTargets() {
             targets.push(target);
             respawnTimes.push(0);
 
-            // Ajouter des traînées pour chaque cible
-            const trail = createTrail(target);
-            trailParticles.push(trail);
-            scene.add(trail);
         } else {
             console.error(`Target of type ${type} is not correctly initialized.`);
         }
@@ -121,7 +123,6 @@ document.addEventListener('click', handleClick);
 function handleClick(event) {
     if (!initialConfig.gameActive || !initialConfig.gameInitialized) return;
 
-    // Play the laser sound
     laserSound.currentTime = 0;
     laserSound.play();
 
@@ -148,54 +149,21 @@ function handleColorTransition(startTime, duration, colorStart, colorEnd, elapse
 
 function updateScreenLimits() {
     const aspectRatio = sizes.width / sizes.height;
-    const limit = 15 * aspectRatio; // Adjust the multiplier as needed
+    const limit = 15 * aspectRatio;
     SCREEN_LIMIT.LEFT = -limit;
     SCREEN_LIMIT.RIGHT = limit;
-}
-
-function createTrail(target) {
-    const trailGeometry = new THREE.BufferGeometry();
-    const trailMaterial = new THREE.PointsMaterial({
-        color: 0xffffff,
-        size: 0.1,
-        transparent: true,
-        opacity: 0.5
-    });
-
-    const positions = new Float32Array(100 * 3); // 100 particules
-    trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const trail = new THREE.Points(trailGeometry, trailMaterial);
-    trail.userData.target = target;
-
-    return trail;
-}
-
-function updateTrails() {
-    trailParticles.forEach(trail => {
-        const target = trail.userData.target;
-        const positions = trail.geometry.attributes.position.array;
-
-        for (let i = 0; i < positions.length; i += 3) {
-            positions[i] = target.position.x;
-            positions[i + 1] = target.position.y;
-            positions[i + 2] = target.position.z;
-        }
-
-        trail.geometry.attributes.position.needsUpdate = true;
-    });
 }
 
 function createExplosion(position) {
     const explosionGeometry = new THREE.BufferGeometry();
     const explosionMaterial = new THREE.PointsMaterial({
-        color: 0xff0000,
-        size: 0.2,
+        color: 0xcecece,
+        size: 0.1,
         transparent: true,
         opacity: 1.0
     });
 
-    const positions = new Float32Array(200 * 3); // 200 particules
+    const positions = new Float32Array(200 * 3);
     explosionGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
     const explosion = new THREE.Points(explosionGeometry, explosionMaterial);
@@ -230,7 +198,7 @@ function updateExplosions(deltaTime) {
         explosion.geometry.attributes.position.needsUpdate = true;
         explosion.material.opacity = 1.0 - explosion.userData.time * 0.5;
 
-        return explosion.userData.time < 2; // Supprimer après 2 secondes
+        return explosion.userData.time < 2;
     });
 }
 
@@ -254,10 +222,21 @@ function tick() {
     if (elapsedTime >= 33 && initialConfig.thirdTransitionStartTime === 0) {
         initialConfig.thirdTransitionStartTime = elapsedTime;
     }
-
+    if (elapsedTime >= 65 && initialConfig.freezeTime === 0) {
+        initialConfig.fourTransitionStartTime = elapsedTime;
+    }
+    if (elapsedTime >= 95 && initialConfig.fourTransitionStartTime === 0) {
+        initialConfig.fiveTransitionStartTime = elapsedTime;
+    }
+    if (elapsedTime >= 118 && initialConfig.fiveTransitionStartTime === 0) {
+        initialConfig.sixTransitionStartTime = elapsedTime;
+    }
     handleColorTransition(initialConfig.transitionStartTime, initialConfig.transitionDuration, initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, elapsedTime);
     handleColorTransition(initialConfig.secondTransitionStartTime, initialConfig.transitionDuration, initialConfig.transitionBackgroundColor, initialConfig.greenBackgroundColor, elapsedTime);
     handleColorTransition(initialConfig.thirdTransitionStartTime, initialConfig.transitionDuration, initialConfig.greenBackgroundColor, initialConfig.purpleBackgroundColor, elapsedTime);
+    handleColorTransition(initialConfig.fourTransitionStartTime, initialConfig.transitionDuration, initialConfig.purpleBackgroundColor, initialConfig.darkBrownBackgroundColor, elapsedTime);
+    handleColorTransition(initialConfig.fiveTransitionStartTime, initialConfig.transitionDuration, initialConfig.darkBrownBackgroundColor, initialConfig.darkYellowBackgroundColor, elapsedTime);
+    handleColorTransition(initialConfig.sixTransitionStartTime, initialConfig.transitionDuration, initialConfig.darkYellowBackgroundColor, initialConfig.darkRedBackgroundColor, elapsedTime);
 
     if (initialConfig.freezeTime > 0) {
         if (elapsedTime - initialConfig.freezeStartTime < initialConfig.freezeTime) {
@@ -279,7 +258,7 @@ function tick() {
 
     targets.forEach((target, index) => {
         if (initialConfig.freezeTime === 0 && target.userData) {
-            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.009, target.userData.maxSpeed);
+            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.007, target.userData.maxSpeed);
             target.position.x += target.userData.speed * 0.01;
         }
 
@@ -327,7 +306,6 @@ function tick() {
         }
     }
 
-    updateTrails();
     updateExplosions(deltaTime);
 
     renderer.render(scene, camera);
@@ -414,6 +392,7 @@ function createUIElement(position, bottom, text) {
     element.style.bottom = bottom;
     element.style[position] = '10px';
     element.style.color = 'white';
+    element.style.pointerEvents = 'none';
     element.style.fontSize = '24px';
     element.textContent = text;
     element.style.display = 'none';
