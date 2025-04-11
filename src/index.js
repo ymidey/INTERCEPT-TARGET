@@ -143,10 +143,10 @@ function handleColorTransition(startTime, duration, colorStart, colorEnd, elapse
     if (startTime > 0 && elapsedTime < startTime + duration) {
         const transitionElapsedTime = elapsedTime - startTime;
         const t = Math.min(transitionElapsedTime / duration, 1);
-        scene.background.lerpColors(new THREE.Color(colorStart), new THREE.Color(colorEnd), t);
+        const smoothT = t * t * (3 - 2 * t);
+        scene.background.lerpColors(new THREE.Color(colorStart), new THREE.Color(colorEnd), smoothT);
     }
 }
-
 function updateScreenLimits() {
     const aspectRatio = sizes.width / sizes.height;
     const limit = 15 * aspectRatio;
@@ -211,25 +211,29 @@ function tick() {
 
     let livesLost = 0;
 
-    if (elapsedTime >= 15 && initialConfig.transitionStartTime === 0) {
+    if (elapsedTime >= 15 && initialConfig.freezeTime === 0) {
         initialConfig.transitionStartTime = elapsedTime;
     }
 
-    if (elapsedTime >= 24 && initialConfig.secondTransitionStartTime === 0) {
+    if (elapsedTime >= 24 && initialConfig.freezeTime === 0) {
         initialConfig.secondTransitionStartTime = elapsedTime;
     }
 
-    if (elapsedTime >= 33 && initialConfig.thirdTransitionStartTime === 0) {
+    if (elapsedTime >= 33 && initialConfig.freezeTime === 0) {
         initialConfig.thirdTransitionStartTime = elapsedTime;
     }
     if (elapsedTime >= 65 && initialConfig.freezeTime === 0) {
         initialConfig.fourTransitionStartTime = elapsedTime;
     }
-    if (elapsedTime >= 95 && initialConfig.fourTransitionStartTime === 0) {
+    if (elapsedTime >= 95 && initialConfig.freezeTime === 0) {
         initialConfig.fiveTransitionStartTime = elapsedTime;
     }
-    if (elapsedTime >= 118 && initialConfig.fiveTransitionStartTime === 0) {
+    if (elapsedTime >= 118 && initialConfig.freezeTime === 0) {
         initialConfig.sixTransitionStartTime = elapsedTime;
+    }
+    if (initialConfig.sixTransitionStartTime > 0 &&
+        elapsedTime >= initialConfig.sixTransitionStartTime + initialConfig.transitionDuration) {
+        scene.background.set(initialConfig.darkRedBackgroundColor);
     }
     handleColorTransition(initialConfig.transitionStartTime, initialConfig.transitionDuration, initialConfig.originalBackgroundColor, initialConfig.transitionBackgroundColor, elapsedTime);
     handleColorTransition(initialConfig.secondTransitionStartTime, initialConfig.transitionDuration, initialConfig.transitionBackgroundColor, initialConfig.greenBackgroundColor, elapsedTime);
@@ -237,6 +241,7 @@ function tick() {
     handleColorTransition(initialConfig.fourTransitionStartTime, initialConfig.transitionDuration, initialConfig.purpleBackgroundColor, initialConfig.darkBrownBackgroundColor, elapsedTime);
     handleColorTransition(initialConfig.fiveTransitionStartTime, initialConfig.transitionDuration, initialConfig.darkBrownBackgroundColor, initialConfig.darkYellowBackgroundColor, elapsedTime);
     handleColorTransition(initialConfig.sixTransitionStartTime, initialConfig.transitionDuration, initialConfig.darkYellowBackgroundColor, initialConfig.darkRedBackgroundColor, elapsedTime);
+
 
     if (initialConfig.freezeTime > 0) {
         if (elapsedTime - initialConfig.freezeStartTime < initialConfig.freezeTime) {
@@ -249,7 +254,7 @@ function tick() {
             return;
         } else {
             initialConfig.freezeTime = 0;
-            if (initialConfig.preFreezeColor) {
+            if (initialConfig.preFreezeColor !== null) {
                 scene.background = new THREE.Color(initialConfig.preFreezeColor);
                 initialConfig.preFreezeColor = null;
             }
@@ -258,7 +263,7 @@ function tick() {
 
     targets.forEach((target, index) => {
         if (initialConfig.freezeTime === 0 && target.userData) {
-            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.007, target.userData.maxSpeed);
+            target.userData.speed = Math.min(target.userData.speed + initialConfig.speedIncreaseFactor * 0.005, target.userData.maxSpeed);
             target.position.x += target.userData.speed * 0.01;
         }
 
@@ -312,6 +317,7 @@ function tick() {
     requestAnimationFrame(tick);
 }
 
+
 function startGame() {
     initialConfig.gameInitialized = true;
     initialConfig.gameActive = true;
@@ -319,9 +325,13 @@ function startGame() {
     canvas.style.display = 'block';
     scoreDiv.style.display = 'block';
     livesDiv.style.display = 'block';
-    initialConfig.transitionStartTime = 0; // Reset transition start time
-    initialConfig.secondTransitionStartTime = 0; // Reset second transition start time
-    initialConfig.thirdTransitionStartTime = 0; // Reset third transition start time
+    initialConfig.transitionStartTime = 0;
+    initialConfig.secondTransitionStartTime = 0;
+    initialConfig.thirdTransitionStartTime = 0;
+    initialConfig.fourTransitionStartTime = 0;
+    initialConfig.fiveTransitionStartTime = 0;
+    initialConfig.sixTransitionStartTime = 0;
+    initialConfig.freezeTime = 0;
 
     resetGameState();
     gameMusic.currentTime = 0;
